@@ -1,0 +1,7 @@
+{
+  "name": "Copy of ZenFlow AI Task Suite",
+  "description": "A modern, AI-augmented task management application featuring smart task refinement, voice interactions via Gemini Live API, and productivity analytics.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

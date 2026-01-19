@@ -1,0 +1,79 @@
+
+import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
+import { Priority, Category } from "../types";
+
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+export const refineTask = async (rawInput: string) => {
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: `Refine this task into a structured JSON object: "${rawInput}". 
+    Categorize it into one of: WORK, PERSONAL, HEALTH, URGENT. 
+    Assign a priority: LOW, MEDIUM, HIGH. 
+    Provide a title and a clearer description.
+    
+    CRITICAL REQUIREMENT: The "title" and "description" MUST be written in the SAME LANGUAGE as the user's input text (e.g., if input is Korean, output must be Korean; if English, output must be English).`,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          title: { type: Type.STRING },
+          description: { type: Type.STRING },
+          priority: { type: Type.STRING, enum: ['LOW', 'MEDIUM', 'HIGH'] },
+          category: { type: Type.STRING, enum: ['WORK', 'PERSONAL', 'HEALTH', 'URGENT'] }
+        },
+        required: ['title', 'description', 'priority', 'category']
+      }
+    }
+  });
+
+  return JSON.parse(response.text.trim());
+};
+
+export const getDailyInspiration = async (todosCount: number) => {
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: `You are a Zen master productivity coach. Provide a single, short, encouraging sentence for someone who has ${todosCount} tasks remaining today. Be poetic and brief in Korean.`
+  });
+  return response.text.trim();
+};
+
+// Live API Helpers
+export const encode = (bytes: Uint8Array) => {
+  let binary = '';
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+};
+
+export const decode = (base64: string) => {
+  const binaryString = atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+};
+
+export async function decodeAudioData(
+  data: Uint8Array,
+  ctx: AudioContext,
+  sampleRate: number,
+  numChannels: number,
+): Promise<AudioBuffer> {
+  const dataInt16 = new Int16Array(data.buffer);
+  const frameCount = dataInt16.length / numChannels;
+  const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
+
+  for (let channel = 0; channel < numChannels; channel++) {
+    const channelData = buffer.getChannelData(channel);
+    for (let i = 0; i < frameCount; i++) {
+      channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
+    }
+  }
+  return buffer;
+}
