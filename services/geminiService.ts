@@ -2,9 +2,17 @@
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { Priority, Category } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// 인스턴스 생성을 함수화하여 process.env가 준비되지 않은 시점의 에러 방지
+const getAI = () => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    console.warn("API_KEY is not defined in process.env");
+  }
+  return new GoogleGenAI({ apiKey: apiKey || '' });
+};
 
 export const refineTask = async (rawInput: string) => {
+  const ai = getAI();
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: `Refine this task into a structured JSON object: "${rawInput}". 
@@ -32,6 +40,7 @@ export const refineTask = async (rawInput: string) => {
 };
 
 export const getDailyInspiration = async (todosCount: number) => {
+  const ai = getAI();
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: `You are a Zen master productivity coach. Provide a single, short, encouraging sentence for someone who has ${todosCount} tasks remaining today. Be poetic and brief in Korean.`
