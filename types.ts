@@ -20,6 +20,7 @@ export interface Todo {
   priority: Priority;
   category: Category;
   createdAt: number;
+  completedAt?: number;
 }
 
 export interface ProductivityData {

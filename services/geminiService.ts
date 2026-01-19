@@ -2,50 +2,61 @@
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { Priority, Category } from "../types";
 
-// 인스턴스 생성을 함수화하여 process.env가 준비되지 않은 시점의 에러 방지
 const getAI = () => {
   const apiKey = process.env.API_KEY;
   if (!apiKey) {
-    console.warn("API_KEY is not defined in process.env");
+    console.error("CRITICAL: API_KEY is missing in process.env. AI features will not work.");
   }
   return new GoogleGenAI({ apiKey: apiKey || '' });
 };
 
 export const refineTask = async (rawInput: string) => {
-  const ai = getAI();
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: `Refine this task into a structured JSON object: "${rawInput}". 
-    Categorize it into one of: WORK, PERSONAL, HEALTH, URGENT. 
-    Assign a priority: LOW, MEDIUM, HIGH. 
-    Provide a title and a clearer description.
-    
-    CRITICAL REQUIREMENT: The "title" and "description" MUST be written in the SAME LANGUAGE as the user's input text (e.g., if input is Korean, output must be Korean; if English, output must be English).`,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          title: { type: Type.STRING },
-          description: { type: Type.STRING },
-          priority: { type: Type.STRING, enum: ['LOW', 'MEDIUM', 'HIGH'] },
-          category: { type: Type.STRING, enum: ['WORK', 'PERSONAL', 'HEALTH', 'URGENT'] }
-        },
-        required: ['title', 'description', 'priority', 'category']
+  try {
+    const ai = getAI();
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: `Refine this task into a structured JSON object: "${rawInput}". 
+      Categorize it into one of: WORK, PERSONAL, HEALTH, URGENT. 
+      Assign a priority: LOW, MEDIUM, HIGH. 
+      Provide a title and a clearer description.
+      
+      CRITICAL: Output MUST be a valid JSON object. 
+      The "title" and "description" MUST be in the same language as the input.`,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            title: { type: Type.STRING },
+            description: { type: Type.STRING },
+            priority: { type: Type.STRING, enum: ['LOW', 'MEDIUM', 'HIGH'] },
+            category: { type: Type.STRING, enum: ['WORK', 'PERSONAL', 'HEALTH', 'URGENT'] }
+          },
+          required: ['title', 'description', 'priority', 'category']
+        }
       }
-    }
-  });
+    });
 
-  return JSON.parse(response.text.trim());
+    if (!response.text) throw new Error("Empty response from AI");
+    return JSON.parse(response.text.trim());
+  } catch (error) {
+    console.error("Refine Task Error:", error);
+    throw error;
+  }
 };
 
 export const getDailyInspiration = async (todosCount: number) => {
-  const ai = getAI();
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: `You are a Zen master productivity coach. Provide a single, short, encouraging sentence for someone who has ${todosCount} tasks remaining today. Be poetic and brief in Korean.`
-  });
-  return response.text.trim();
+  try {
+    const ai = getAI();
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: `You are a Zen master productivity coach. Provide a single, short, encouraging sentence for someone who has ${todosCount} tasks remaining today. Be poetic and brief in Korean.`
+    });
+    return response.text?.trim() || "오늘도 당신만의 속도로 나아가세요.";
+  } catch (error) {
+    console.error("Inspiration Error:", error);
+    return "현재에 집중하며 한 걸음씩 나아가세요.";
+  }
 };
 
 // Live API Helpers

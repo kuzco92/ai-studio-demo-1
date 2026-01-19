@@ -22,6 +22,9 @@ const App: React.FC = () => {
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
   const [isVoiceActive, setIsVoiceActive] = useState(false);
   
+  // Drag & Drop State
+  const [draggedItemIndex, setDraggedItemIndex] = useState<number | null>(null);
+
   // Voice API Refs
   const audioContextRef = useRef<AudioContext | null>(null);
   const nextStartTimeRef = useRef(0);
@@ -95,7 +98,17 @@ const App: React.FC = () => {
   };
 
   const handleToggleTodo = (id: string) => {
-    setTodos(prev => prev.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
+    setTodos(prev => prev.map(t => {
+      if (t.id === id) {
+        const isNowCompleted = !t.completed;
+        return { 
+          ...t, 
+          completed: isNowCompleted,
+          completedAt: isNowCompleted ? Date.now() : undefined 
+        };
+      }
+      return t;
+    }));
   };
 
   const handleDeleteTodo = (id: string) => {
@@ -106,6 +119,27 @@ const App: React.FC = () => {
     const priorities = [Priority.LOW, Priority.MEDIUM, Priority.HIGH];
     const next = priorities[(priorities.indexOf(current) + 1) % priorities.length];
     setTodos(prev => prev.map(t => t.id === id ? { ...t, priority: next } : t));
+  };
+
+  // Drag and Drop Handlers
+  const handleDragStart = (index: number) => {
+    setDraggedItemIndex(index);
+  };
+
+  const handleDragOver = (index: number) => {
+    if (draggedItemIndex === null || draggedItemIndex === index) return;
+    
+    const newTodos = [...todos];
+    const draggedItem = newTodos[draggedItemIndex];
+    newTodos.splice(draggedItemIndex, 1);
+    newTodos.splice(index, 0, draggedItem);
+    
+    setDraggedItemIndex(index);
+    setTodos(newTodos);
+  };
+
+  const handleDrop = () => {
+    setDraggedItemIndex(null);
   };
 
   const handleQuickAdd = async (e: React.FormEvent) => {
@@ -236,10 +270,10 @@ const App: React.FC = () => {
 
       {activeTab === 'todos' && (
         <div className="flex flex-col h-[calc(100vh-12rem)]">
-          <div className="flex-1 overflow-y-auto pb-24 pr-2">
+          <div className="flex-1 overflow-y-auto pb-24 pr-2 custom-scrollbar">
             <div className="mb-8">
               <h2 className="text-2xl font-bold text-white">Your Journey</h2>
-              <p className="text-slate-400 text-sm">Today's focus and future steps.</p>
+              <p className="text-slate-400 text-sm">Today's focus and future steps. Drag to reorder your priority.</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -249,14 +283,18 @@ const App: React.FC = () => {
                   <p className="text-slate-500">No tasks yet. Use the bar below to add one!</p>
                 </div>
               ) : (
-                todos.map(todo => (
+                todos.map((todo, index) => (
                   <TodoItem 
                     key={todo.id} 
                     todo={todo} 
+                    index={index}
                     onToggle={handleToggleTodo} 
                     onDelete={handleDeleteTodo}
                     onEdit={setEditingTodo}
                     onPriorityToggle={handlePriorityToggle}
+                    onDragStart={handleDragStart}
+                    onDragOver={handleDragOver}
+                    onDrop={handleDrop}
                   />
                 ))
               )}
