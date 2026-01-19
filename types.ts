@@ -26,3 +26,15 @@ export interface ProductivityData {
   day: string;
   count: number;
 }
+
+export enum UserRole {
+  ADMIN = 'ADMIN',
+  USER = 'USER'
+}
+
+export interface User {
+  username: string;
+  password?: string; // Only stored in local storage mock-up
+  role: UserRole;
+  createdAt: number;
+}

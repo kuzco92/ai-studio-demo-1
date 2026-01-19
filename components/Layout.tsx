@@ -1,14 +1,17 @@
 
 import React from 'react';
-import { LayoutDashboard, ListTodo, PieChart, Sparkles, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, ListTodo, PieChart, Sparkles, MessageSquare, LogOut, Shield } from 'lucide-react';
+import { User, UserRole } from '../types';
 
 interface LayoutProps {
   children: React.ReactNode;
-  activeTab: 'dashboard' | 'todos' | 'analytics';
-  setActiveTab: (tab: 'dashboard' | 'todos' | 'analytics') => void;
+  activeTab: 'dashboard' | 'todos' | 'analytics' | 'admin';
+  setActiveTab: (tab: 'dashboard' | 'todos' | 'analytics' | 'admin') => void;
+  currentUser: User | null;
+  onLogout: () => void;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab }) => {
+const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, currentUser, onLogout }) => {
   return (
     <div className="flex h-screen bg-[#0f172a] text-slate-200 overflow-hidden">
       {/* Sidebar */}
@@ -39,22 +42,45 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab }) =>
             active={activeTab === 'analytics'} 
             onClick={() => setActiveTab('analytics')} 
           />
+          {currentUser?.role === UserRole.ADMIN && (
+            <SidebarItem 
+              icon={<Shield />} 
+              label="Admin Panel" 
+              active={activeTab === 'admin'} 
+              onClick={() => setActiveTab('admin')} 
+            />
+          )}
         </nav>
 
-        <div className="p-4 border-t border-slate-800">
+        <div className="p-4 border-t border-slate-800 space-y-2">
           <div className="hidden md:flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-white cursor-pointer transition-colors">
             <MessageSquare className="w-5 h-5" />
             <span className="text-sm font-medium">Support AI</span>
           </div>
+          <button 
+            onClick={onLogout}
+            className="w-full flex items-center gap-4 px-4 py-3 rounded-xl text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-all"
+          >
+            <LogOut size={22} />
+            <span className="hidden md:block font-medium text-sm">Logout</span>
+          </button>
         </div>
       </aside>
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col overflow-hidden">
         <header className="h-16 border-b border-slate-800 bg-[#0f172a]/50 backdrop-blur-md flex items-center justify-between px-8 z-10">
-          <h1 className="text-lg font-semibold text-white capitalize">{activeTab}</h1>
+          <h1 className="text-lg font-semibold text-white capitalize">
+            {activeTab === 'admin' ? 'Management' : activeTab}
+          </h1>
           <div className="flex items-center gap-4">
-            <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold">JD</div>
+            <div className="text-right hidden sm:block">
+              <p className="text-xs font-bold text-white">{currentUser?.username}</p>
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{currentUser?.role}</p>
+            </div>
+            <div className="w-10 h-10 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-indigo-400">
+              {currentUser?.username.substring(0, 2).toUpperCase()}
+            </div>
           </div>
         </header>
         <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-900/30">

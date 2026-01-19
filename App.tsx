@@ -4,14 +4,19 @@ import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import TodoItem from './components/TodoItem';
 import AnalyticsView from './components/AnalyticsView';
-import { Todo, Priority, Category } from './types';
+import AdminPanel from './components/AdminPanel';
+import Login from './components/Login';
+import { Todo, Priority, Category, User, UserRole } from './types';
 import { refineTask, encode, decode, decodeAudioData } from './services/geminiService';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
-import { Sparkles, Send, Loader2, Mic, X, Plus, Save } from 'lucide-react';
+import { Sparkles, Loader2, Mic, X, Plus, Save, PenLine, Zap } from 'lucide-react';
 
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'todos' | 'analytics'>('dashboard');
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'todos' | 'analytics' | 'admin'>('dashboard');
+  const [addMode, setAddMode] = useState<'AI' | 'Normal'>('AI');
   const [todos, setTodos] = useState<Todo[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [quickInput, setQuickInput] = useState('');
   const [isRefining, setIsRefining] = useState(false);
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
@@ -22,14 +27,72 @@ const App: React.FC = () => {
   const nextStartTimeRef = useRef(0);
   const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
 
+  // Initialization & Auth
   useEffect(() => {
-    const saved = localStorage.getItem('zenflow_todos');
-    if (saved) setTodos(JSON.parse(saved));
+    const savedUsers = localStorage.getItem('zenflow_users');
+    let initialUsers: User[] = [];
+    if (savedUsers) {
+      initialUsers = JSON.parse(savedUsers);
+    } else {
+      initialUsers = [{
+        username: 'admin',
+        password: 'admin',
+        role: UserRole.ADMIN,
+        createdAt: Date.now()
+      }];
+      localStorage.setItem('zenflow_users', JSON.stringify(initialUsers));
+    }
+    setUsers(initialUsers);
+
+    const session = localStorage.getItem('zenflow_session');
+    if (session) {
+      const user = initialUsers.find(u => u.username === session);
+      if (user) setCurrentUser(user);
+    }
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('zenflow_todos', JSON.stringify(todos));
-  }, [todos]);
+    if (currentUser) {
+      const saved = localStorage.getItem(`zenflow_todos_${currentUser.username}`);
+      setTodos(saved ? JSON.parse(saved) : []);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem(`zenflow_todos_${currentUser.username}`, JSON.stringify(todos));
+    }
+  }, [todos, currentUser]);
+
+  useEffect(() => {
+    localStorage.setItem('zenflow_users', JSON.stringify(users));
+  }, [users]);
+
+  const handleLogin = (id: string, pw: string) => {
+    const user = users.find(u => u.username === id && u.password === pw);
+    if (user) {
+      setCurrentUser(user);
+      localStorage.setItem('zenflow_session', user.username);
+      return true;
+    }
+    return false;
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('zenflow_session');
+    setActiveTab('dashboard');
+  };
+
+  const handleAddUser = (user: User) => {
+    setUsers(prev => [...prev, user]);
+  };
+
+  const handleDeleteUser = (username: string) => {
+    if (username === 'admin') return;
+    setUsers(prev => prev.filter(u => u.username !== username));
+    localStorage.removeItem(`zenflow_todos_${username}`);
+  };
 
   const handleToggleTodo = (id: string) => {
     setTodos(prev => prev.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
@@ -49,6 +112,21 @@ const App: React.FC = () => {
     e.preventDefault();
     if (!quickInput.trim() || isRefining) return;
 
+    if (addMode === 'Normal') {
+      const newTodo: Todo = {
+        id: crypto.randomUUID(),
+        title: quickInput,
+        description: '',
+        priority: Priority.MEDIUM,
+        category: Category.PERSONAL,
+        completed: false,
+        createdAt: Date.now()
+      };
+      setTodos(prev => [newTodo, ...prev]);
+      setQuickInput('');
+      return;
+    }
+
     setIsRefining(true);
     try {
       const refined = await refineTask(quickInput);
@@ -64,11 +142,11 @@ const App: React.FC = () => {
       setTodos(prev => [newTodo, ...prev]);
       setQuickInput('');
     } catch (err) {
-      console.error("AI refinement failed, using fallback:", err);
+      console.error("AI refinement failed:", err);
       const fallback: Todo = {
         id: crypto.randomUUID(),
         title: quickInput,
-        description: '', // Leave empty rather than using English fallback text
+        description: '',
         priority: Priority.MEDIUM,
         category: Category.PERSONAL,
         completed: false,
@@ -132,13 +210,22 @@ const App: React.FC = () => {
       },
       config: {
         responseModalities: [Modality.AUDIO],
-        systemInstruction: "You are a task management helper. Speak the language the user speaks. Default to Korean if unsure."
+        systemInstruction: `You are a task management helper for ${currentUser?.username}. Speak the language the user speaks.`
       }
     });
   };
 
+  if (!currentUser) {
+    return <Login onLogin={handleLogin} />;
+  }
+
   return (
-    <Layout activeTab={activeTab} setActiveTab={setActiveTab}>
+    <Layout 
+      activeTab={activeTab} 
+      setActiveTab={setActiveTab} 
+      currentUser={currentUser} 
+      onLogout={handleLogout}
+    >
       {activeTab === 'dashboard' && (
         <Dashboard 
           todos={todos} 
@@ -159,7 +246,7 @@ const App: React.FC = () => {
               {todos.length === 0 ? (
                 <div className="col-span-full py-20 text-center bg-slate-800/10 rounded-3xl border-2 border-dashed border-slate-800">
                   <Sparkles className="mx-auto w-10 h-10 text-slate-700 mb-4" />
-                  <p className="text-slate-500">No tasks yet. Use the bar below to add one with AI!</p>
+                  <p className="text-slate-500">No tasks yet. Use the bar below to add one!</p>
                 </div>
               ) : (
                 todos.map(todo => (
@@ -176,38 +263,95 @@ const App: React.FC = () => {
             </div>
           </div>
 
+          {/* Smart Quick Add Bar with Tabs */}
           <div className="absolute bottom-8 left-8 right-8 max-w-6xl mx-auto">
-            <form 
-              onSubmit={handleQuickAdd}
-              className={`group flex items-center gap-3 bg-slate-800/80 backdrop-blur-xl border-2 p-2 pl-5 rounded-2xl transition-all shadow-2xl ${
-                isRefining ? 'border-indigo-500 ring-4 ring-indigo-500/10' : 'border-slate-700 focus-within:border-slate-500'
-              }`}
-            >
-              <div className="text-indigo-400">
-                {isRefining ? <Loader2 className="animate-spin w-5 h-5" /> : <Plus size={20} />}
+            <div className="relative">
+              {/* Mode Toggle Tabs */}
+              <div className="absolute -top-10 left-0 flex items-center bg-slate-800/60 backdrop-blur-md p-1 rounded-t-xl border-t border-x border-slate-700 gap-1">
+                <button 
+                  onClick={() => setAddMode('AI')}
+                  className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all ${
+                    addMode === 'AI' 
+                      ? 'bg-indigo-600 text-white shadow-lg' 
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Zap size={12} className={addMode === 'AI' ? 'animate-pulse' : ''} /> AI Mode
+                </button>
+                <button 
+                  onClick={() => setAddMode('Normal')}
+                  className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all ${
+                    addMode === 'Normal' 
+                      ? 'bg-slate-700 text-white shadow-lg' 
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <PenLine size={12} /> Normal
+                </button>
               </div>
-              <input 
-                type="text"
-                value={quickInput}
-                onChange={(e) => setQuickInput(e.target.value)}
-                placeholder={isRefining ? "Gemini is analyzing..." : "Add a task (e.g. '3시에 디자인 미팅')"}
-                className="flex-1 bg-transparent border-none outline-none text-white placeholder-slate-500 text-sm py-2"
-                disabled={isRefining}
-              />
-              <button 
-                type="submit"
-                disabled={!quickInput.trim() || isRefining}
-                className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2"
+
+              {/* Input Bar */}
+              <form 
+                onSubmit={handleQuickAdd}
+                className={`group flex items-center gap-3 bg-slate-800/90 backdrop-blur-xl border-2 p-2 pl-5 rounded-2xl transition-all shadow-2xl ${
+                  isRefining 
+                    ? 'border-indigo-500 ring-4 ring-indigo-500/10' 
+                    : addMode === 'AI' 
+                      ? 'border-slate-700 focus-within:border-indigo-500/50 shadow-indigo-500/5'
+                      : 'border-slate-700 focus-within:border-slate-500'
+                }`}
               >
-                <Sparkles size={14} /> AI ADD
-              </button>
-            </form>
+                <div className={`${addMode === 'AI' ? 'text-indigo-400' : 'text-slate-500'}`}>
+                  {isRefining ? (
+                    <Loader2 className="animate-spin w-5 h-5" />
+                  ) : addMode === 'AI' ? (
+                    <Sparkles size={20} />
+                  ) : (
+                    <Plus size={20} />
+                  )}
+                </div>
+                <input 
+                  type="text"
+                  value={quickInput}
+                  onChange={(e) => setQuickInput(e.target.value)}
+                  placeholder={
+                    isRefining 
+                      ? "Gemini is analyzing..." 
+                      : addMode === 'AI' 
+                        ? "AI분석을 위해 내용을 적어주세요 (예: 오늘 저녁 8시 친구와 약속)" 
+                        : "할 일을 입력하세요..."
+                  }
+                  className="flex-1 bg-transparent border-none outline-none text-white placeholder-slate-500 text-sm py-2"
+                  disabled={isRefining}
+                />
+                <button 
+                  type="submit"
+                  disabled={!quickInput.trim() || isRefining}
+                  className={`px-6 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-lg disabled:bg-slate-700 disabled:opacity-50 ${
+                    addMode === 'AI' 
+                      ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/20' 
+                      : 'bg-slate-200 hover:bg-white text-slate-900 shadow-white/5'
+                  }`}
+                >
+                  {addMode === 'AI' ? <Sparkles size={14} /> : <Plus size={14} />}
+                  {addMode === 'AI' ? 'AI REFINER' : 'QUICK ADD'}
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       )}
 
       {activeTab === 'analytics' && (
         <AnalyticsView todos={todos} />
+      )}
+
+      {activeTab === 'admin' && currentUser.role === UserRole.ADMIN && (
+        <AdminPanel 
+          users={users} 
+          onAddUser={handleAddUser} 
+          onDeleteUser={handleDeleteUser} 
+        />
       )}
 
       {editingTodo && (
@@ -237,7 +381,6 @@ const App: React.FC = () => {
                   value={editingTodo.description}
                   onChange={(e) => setEditingTodo({...editingTodo, description: e.target.value})}
                   className="w-full h-32 bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none transition-all"
-                  placeholder="Add more context here..."
                 />
               </div>
 
@@ -247,7 +390,7 @@ const App: React.FC = () => {
                   <select 
                     value={editingTodo.priority}
                     onChange={(e) => setEditingTodo({...editingTodo, priority: e.target.value as Priority})}
-                    className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none"
+                    className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white"
                   >
                     {Object.values(Priority).map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
@@ -257,7 +400,7 @@ const App: React.FC = () => {
                   <select 
                     value={editingTodo.category}
                     onChange={(e) => setEditingTodo({...editingTodo, category: e.target.value as Category})}
-                    className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none"
+                    className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white"
                   >
                     {Object.values(Category).map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
@@ -265,17 +408,8 @@ const App: React.FC = () => {
               </div>
 
               <div className="flex justify-end gap-3 pt-4">
-                <button 
-                  type="button" 
-                  onClick={() => setEditingTodo(null)}
-                  className="px-6 py-2.5 text-slate-400 hover:text-white font-semibold transition-colors"
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit"
-                  className="px-8 py-2.5 bg-indigo-600 text-white rounded-xl font-bold flex items-center gap-2 hover:bg-indigo-700 transition-all shadow-lg"
-                >
+                <button type="button" onClick={() => setEditingTodo(null)} className="px-6 py-2.5 text-slate-400 hover:text-white font-semibold">Cancel</button>
+                <button type="submit" className="px-8 py-2.5 bg-indigo-600 text-white rounded-xl font-bold flex items-center gap-2 hover:bg-indigo-700 transition-all shadow-lg">
                   <Save size={18} /> Save Changes
                 </button>
               </div>
@@ -289,11 +423,9 @@ const App: React.FC = () => {
            <div className="bg-indigo-600 px-8 py-4 rounded-full shadow-2xl shadow-indigo-500/50 flex items-center gap-4">
               <div className="relative">
                 <div className="absolute inset-0 animate-ping rounded-full bg-white/30"></div>
-                <div className="relative bg-white p-2 rounded-full">
-                  <Mic className="text-indigo-600" size={20} />
-                </div>
+                <div className="relative bg-white p-2 rounded-full"><Mic className="text-indigo-600" size={20} /></div>
               </div>
-              <p className="text-white font-bold text-sm">ZenFlow Voice Active...</p>
+              <p className="text-white font-bold text-sm">Voice Active...</p>
               <button onClick={() => setIsVoiceActive(false)} className="ml-4 text-indigo-100 hover:text-white"><X size={18} /></button>
            </div>
         </div>
