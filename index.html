@@ -8,36 +8,35 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script>
-        // 전역 에러 핸들러 (디버깅용)
+        // 전역 에러 모니터링
         window.onerror = function(msg, url, lineNo, columnNo, error) {
-            console.error('Error: ' + msg + '\nScript: ' + url + '\nLine: ' + lineNo + '\nColumn: ' + columnNo + '\nStackTrace: ' +  error);
+            console.error('Runtime Error: ', msg, '\nAt: ', url, ':', lineNo);
             return false;
         };
 
-        // 완벽한 process.env 폴리필
+        // process.env 폴리필 (모듈 로드 전 최상단 실행)
         window.process = {
-            env: { NODE_ENV: 'production' },
+            env: { 
+                NODE_ENV: 'production',
+                API_KEY: '' // 시스템 자동 주입
+            },
             nextTick: function(fn) { setTimeout(fn, 0); }
         };
-        // API_KEY는 실제 환경에서 주입되므로 객체만 보장
-        if (!window.process.env.API_KEY) {
-            window.process.env.API_KEY = ""; 
-        }
     </script>
-<script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@19.0.0",
-    "react-dom": "https://esm.sh/react-dom@19.0.0",
-    "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
-    "recharts": "https://esm.sh/recharts@2.15.0?external=react,react-dom",
-    "lucide-react": "https://esm.sh/lucide-react@0.475.0?external=react",
-    "@google/genai": "https://esm.sh/@google/genai@1.37.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "react/": "https://esm.sh/react@^19.2.3/"
-  }
-}
-</script>
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@19.0.0",
+        "react/": "https://esm.sh/react@19.0.0/",
+        "react-dom": "https://esm.sh/react-dom@19.0.0",
+        "react-dom/": "https://esm.sh/react-dom@19.0.0/",
+        "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
+        "recharts": "https://esm.sh/recharts@2.15.0?external=react,react-dom",
+        "lucide-react": "https://esm.sh/lucide-react@0.475.0?external=react",
+        "@google/genai": "https://esm.sh/@google/genai@1.37.0"
+      }
+    }
+    </script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -47,16 +46,6 @@
             padding: 0;
             min-height: 100vh;
         }
-        ::-webkit-scrollbar {
-            width: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #334155;
-            border-radius: 10px;
-        }
         #root:empty {
             display: flex;
             align-items: center;
@@ -65,20 +54,21 @@
             background: #0f172a;
         }
         #root:empty::after {
-            content: "Loading ZenFlow...";
+            content: "Loading ZenFlow AI...";
             color: #6366f1;
             font-weight: 700;
-            letter-spacing: 0.1em;
-            text-transform: uppercase;
+            letter-spacing: 0.05em;
             animation: pulse 1.5s infinite;
         }
         @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.98); }
         }
     </style>
 </head>
 <body>
     <div id="root"></div>
+    <!-- 앱의 시작점인 index.tsx를 명시적으로 로드합니다. -->
+    <script type="module" src="index.tsx"></script>
 </body>
 </html>
